@@ -1,0 +1,4 @@
+flwr==1.22.0
+torch==2.9.0
+torchvision==0.24.0
+numpy>=2.3.3

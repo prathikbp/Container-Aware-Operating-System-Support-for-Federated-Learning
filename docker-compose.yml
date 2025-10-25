@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  server:
+    build: .
+    command: python server.py
+    ports:
+      - "8080:8080"
+    volumes:
+      - data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  client:
+    build: .
+    command: python client.py
+    volumes:
+      - data:/app/data
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  data:
