@@ -8,7 +8,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     netcat-traditional \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Copy requirements first for Docker layer caching
 COPY requirements.txt .
@@ -28,6 +29,9 @@ ENV PYTHONUNBUFFERED=1
 
 # Expose ports used by Flower server (8080) and Prometheus metrics (8000)
 EXPOSE 8080 8000
+
+# Health check
+HEALTHCHECK CMD curl --fail http://localhost:8080/ || exit 1
 
 # Default command (overridden in docker-compose.yml)
 CMD ["python", "server.py"]

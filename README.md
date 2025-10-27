@@ -28,11 +28,120 @@ This project implements a containerized Federated Learning system using Flower (
 - Docker for containerization
 - Docker Compose for service orchestration
 
-## Dependencies
+## Requirements
+
+### System Requirements
+- Docker Engine 24.0 or later
+- Docker Compose v2.0 or later
+- At least 4GB RAM
+- 10GB free disk space
+
+### Python Dependencies
 - flwr==1.22.0
 - torch==2.9.0
 - torchvision==0.24.0
 - numpy>=2.3.3
+
+### Operating System Support
+- Linux (recommended)
+- macOS
+- Windows with WSL2
+
+## Setup Instructions
+
+1. Clone the repository:
+```bash
+git clone https://github.com/prathikbp/Container-Aware-Operating-System-Support-for-Federated-Learning.git
+cd Container-Aware-Operating-System-Support-for-Federated-Learning
+```
+
+2. (Optional) Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Linux/macOS
+# or
+.\venv\Scripts\activate  # On Windows
+```
+
+3. Install dependencies (if running without Docker):
+```bash
+pip install -r requirements.txt
+```
+
+## Running the Project
+
+### Using Docker (Recommended)
+
+1. Build and start the system with one server and one client:
+```bash
+docker-compose up --build
+```
+
+2. Scale to multiple clients (e.g., 3 clients):
+```bash
+docker-compose up --scale client=3
+```
+
+3. Monitor the training progress in the logs:
+```bash
+docker-compose logs -f
+```
+
+4. Stop the system:
+```bash
+docker-compose down
+```
+
+### Running Without Docker
+
+1. Start the server:
+```bash
+# Basic server start
+python server.py
+
+# Start server with custom address and rounds
+python server.py --server-address "0.0.0.0:8080" --num-rounds 10
+
+# Start server with minimum client requirements
+python server.py --min-fit-clients 3 --min-evaluate-clients 3 --min-available-clients 3
+
+# Start server with custom client fractions
+python server.py --fraction-fit 0.8 --fraction-evaluate 0.8
+```
+
+2. Start one or more clients (in separate terminals):
+```bash
+# Basic client start
+python client.py
+
+# Start client with custom server address
+python client.py --server-address "localhost:8080"
+
+# Start client with custom training parameters
+python client.py --batch-size 64 --local-epochs 2 --learning-rate 0.001 --momentum 0.9
+```
+
+Note: To run multiple clients, open multiple terminal windows and run the client script with different client IDs.
+
+Example workflow for 3 clients:
+```bash
+# Terminal 1 - Start Server
+python server.py --num-rounds 10 --min-fit-clients 3 --min-evaluate-clients 3 --min-available-clients 3
+
+# Terminal 2 - Start Client 1
+python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
+
+# Terminal 3 - Start Client 2
+python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
+
+# Terminal 4 - Start Client 3
+python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
+```
+
+### Troubleshooting
+- If you see "address already in use" error, ensure no other FL server is running
+- If clients can't connect, check if the server is properly started
+- For CUDA errors, ensure PyTorch is properly installed with CUDA support
 
 ## Model Architecture
 - Convolutional Neural Network (CNN)
