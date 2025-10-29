@@ -6,11 +6,13 @@ This project implements a containerized Federated Learning system using Flower (
 ```
 .
 ├── Dockerfile          # Container configuration for both server and clients
-├── docker-compose.yml # Docker services configuration
-├── requirements.txt   # Python dependencies
-├── server.py         # FL server implementation
-├── client.py         # FL client implementation
-└── data/            # MNIST dataset directory (auto-downloaded)
+├── docker-compose.yml  # Docker services configuration
+├── requirements.txt    # Python dependencies
+├── server.py           # FL server implementation
+├── client.py           # FL client implementation
+├── task.py             # FL model and data loaders
+├── run_fl.sh           # deployment script
+└── data/               # MNIST dataset directory (auto-downloaded)
 ```
 
 ## Features
@@ -69,27 +71,39 @@ pip install -r requirements.txt
 ```
 
 ## Running the Project
+### Using the deployment script
+
+Before running the deployment script, ensure executable permissions are set:
+
+```bash
+chmod +x run_fl.sh
+```
+
+```bash
+# Run with 5 clients (default is 3)
+./run_fl.sh 5
+```
 
 ### Using Docker (Recommended)
 
 1. Build and start the system with one server and one client:
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 2. Scale to multiple clients (e.g., 3 clients):
 ```bash
-docker-compose up --scale client=3
+docker compose up --scale client=3
 ```
 
 3. Monitor the training progress in the logs:
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 4. Stop the system:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Running Without Docker
@@ -154,12 +168,12 @@ python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
 
 1. Build and start the system:
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 2. Scale to more clients:
 ```bash
-docker-compose up --scale client=3  # for 3 clients
+docker compose up --scale client=3  # for 3 clients
 ```
 
 ## Federated Learning Configuration
@@ -176,6 +190,8 @@ docker-compose up --scale client=3  # for 3 clients
 - Health Check: Server readiness check before client startup
 
 ## Next Steps
+- Better way to name the partition for each clients
+- Adding a config file instead of CLI parameter passing
 - Adding Prometheus metrics for monitoring
 - Setting up Grafana dashboards
 - Implementing resource constraints for clients

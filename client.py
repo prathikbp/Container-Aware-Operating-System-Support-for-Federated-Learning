@@ -9,9 +9,15 @@ import flwr as fl
 import argparse
 import warnings
 import logging
+import socket
 import os
 from absl import logging as absl_logging
 import logging.handlers
+import time
+
+
+# imports model and data loading functions from task.py
+from task import Net, load_data, train, test
 
 def suppress_warnings():
     # Suppress all warnings
@@ -56,120 +62,36 @@ def parse_args():
                       help='Learning rate (default: 0.01)')
     parser.add_argument('--momentum', type=float, default=0.9,
                       help='SGD momentum (default: 0.9)')
+    parser.add_argument('--num-clients', type=int, default=int(os.getenv('NUM_CLIENTS', '3')),
+                      help='Total number of clients (default: 3)')
     return parser.parse_args()
 
-# Define the neural network model
 
-
-class Net(nn.Module):
-    def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
-        self.fc2 = nn.Linear(128, 10)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        # --- IMPROVEMENT 1 ---
-        # Return raw logits instead of log_softmax
-        # nn.CrossEntropyLoss (used in train) combines log_softmax and nll_loss
-        return x
-
-# Load data
-
-
-def load_data(batch_size: int = 32):
-    # Suppress MNIST download messages
-    logging.getLogger("torchvision.datasets.mnist").setLevel(logging.WARNING)
-    
-    transform = Compose([
-        ToTensor(),
-        Normalize((0.1307,), (0.3081,))
-    ])
-    trainset = MNIST("./data", train=True, download=True, transform=transform)
-    testset = MNIST("./data", train=False, download=True, transform=transform)
-
-    trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    testloader = DataLoader(testset, batch_size=batch_size)
-    return trainloader, testloader
-
-# Train the model
-
-
-def train(model, trainloader, epochs: int, device: torch.device):
-    """Train the model on the training set."""
-    model.to(device)
-    model.train()
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
-
-    print(f"\n[Train] Starting training for {epochs} epochs on {device}")
-    for epoch in range(epochs):
-        running_loss = 0.0
-        batch_count = 0
-        for data, target in trainloader:
-            data, target = data.to(device), target.to(device)
-            optimizer.zero_grad()
-            output = model(data)
-            loss = criterion(output, target)
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-            batch_count += 1
-        
-        avg_loss = running_loss / batch_count
-        print(f"[Train] Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}")
-
-# Evaluate the model
-
-
-def test(model, testloader, device: torch.device):
-    """Evaluate the model on the test set."""
-    print(f"\n[Eval] Starting evaluation on {device}")
-    model.to(device)
-    model.eval()
-    criterion = torch.nn.CrossEntropyLoss()
-    correct, total, test_loss = 0, 0, 0.0
-
-    with torch.no_grad():
-        for data, target in testloader:
-            data, target = data.to(device), target.to(device)
-            outputs = model(data)
-            # --- IMPROVEMENT 2 ---
-            # Calculate loss as well as accuracy
-            loss = criterion(outputs, target)
-            test_loss += loss.item() * data.size(0)  # Accumulate weighted loss
-
-            _, predicted = torch.max(outputs.data, 1)
-            total += target.size(0)
-            correct += (predicted == target).sum().item()
-
-    # Calculate average loss and accuracy
-    avg_loss = test_loss / total
-    accuracy = correct / total
-    print(f"[Eval] Results - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.4f}")
-    return avg_loss, accuracy
 
 # Flower client
-
-
 class MNISTClient(fl.client.NumPyClient):
     def __init__(self, args):
         self.model = Net()
-        self.trainloader, self.testloader = load_data(batch_size=args.batch_size)
+        
+        ## TODO: Improve partition ID assignment logic
+        # Determine partition ID based on container IP address
+        time.sleep(2)
+        container_ip = socket.gethostbyname(socket.gethostname())
+        
+        # Extract the last octet of IP address
+        ip_parts = container_ip.split('.')
+        last_octet = int(ip_parts[-1])
+        partition_id = last_octet - 2
+
+        # Ensure partition ID is within valid range
+        partition_id = partition_id % args.num_clients
+        print(f"Final partition ID: {partition_id}")
+
+        # Use federated data loading with partitioning
+        self.trainloader, self.testloader = load_data(
+            partition_id=partition_id,
+            num_partitions=args.num_clients
+        )
         self.args = args
         # Determine device
         self.device = torch.device(
@@ -192,7 +114,7 @@ class MNISTClient(fl.client.NumPyClient):
         # Use local_epochs from command line args if not specified in server config
         epochs = int(config.get("local_epochs", self.args.local_epochs))
 
-        train(self.model, self.trainloader, epochs=epochs, device=self.device)
+        train(self.model, self.trainloader, epochs=epochs, device=self.device, lr=self.args.learning_rate, momentum=self.args.momentum)
         
         print("[FL] Completed local training")
         print("="*50)
