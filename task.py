@@ -6,11 +6,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor, Normalize, Compose
 import logging
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner
+import os
+from datasets import disable_progress_bar
+
+disable_progress_bar()
 
 # Initialize FederatedDataset
 fds = None
@@ -47,16 +50,19 @@ def load_data(partition_id: int, num_partitions: int):
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
-        partitioner = IidPartitioner(num_partitions=num_partitions)
+        print("Initializing FederatedDataset...")
+        train_partitioner = IidPartitioner(num_partitions=num_partitions)
+        test_partitioner = IidPartitioner(num_partitions=num_partitions)
         fds = FederatedDataset(
             dataset="ylecun/mnist",
-            partitioners={"train": partitioner},
+            partitioners={"train": train_partitioner, "test": test_partitioner},
         )
-        print(f"FederatedDataset initialized for partition {partition_id}.")
+        print(f"FederatedDataset initialized with partition {partition_id}.")
+    else:
+        print(f"FederatedDataset already initialized using partition {partition_id}.")
     
-    partition = fds.load_partition(partition_id)
-    # Divide data on each node: 80% train, 20% test
-    partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
+    train_split = fds.load_partition(partition_id, "train")
+    test_split = fds.load_partition(partition_id, "test")
     
     # Define transforms
     pytorch_transforms = Compose(
@@ -76,17 +82,22 @@ def load_data(partition_id: int, num_partitions: int):
         labels = torch.tensor([item["label"] for item in batch], dtype=torch.long)
         return images, labels
 
-    partition_train_test = partition_train_test.with_transform(apply_transforms)
+    # Apply transforms to both train and test splits
+    train_split = train_split.with_transform(apply_transforms)
+    test_split = test_split.with_transform(apply_transforms)
+
+    print(f"Partition {partition_id}: Train size = {len(train_split)}, Test size = {len(test_split)}")
+
     
     # Create DataLoaders
     trainloader = DataLoader(
-        partition_train_test["train"], 
+        train_split, 
         batch_size=32, 
         shuffle=True,
         collate_fn=collate_fn
     )
     testloader = DataLoader(
-        partition_train_test["test"], 
+        test_split, 
         batch_size=32,
         collate_fn=collate_fn
     )

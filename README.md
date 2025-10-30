@@ -12,6 +12,8 @@ This project implements a containerized Federated Learning system using Flower (
 ├── client.py           # FL client implementation
 ├── task.py             # FL model and data loaders
 ├── run_fl.sh           # deployment script
+├── prometheus.yml      # Prometheus service config
+├── manager.py          # throttler for testing
 └── data/               # MNIST dataset directory (auto-downloaded)
 ```
 
@@ -69,6 +71,8 @@ source venv/bin/activate  # On Linux/macOS
 ```bash
 pip install -r requirements.txt
 ```
+
+4. Install Docker for Prometheus and Grafana
 
 ## Running the Project
 ### Using the deployment script
@@ -151,6 +155,10 @@ python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
 # Terminal 4 - Start Client 3
 python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
 ```
+### Prometheus and Grafana dashboards
+
+Once the containers are running, access Prometheus at http://localhost:9090 and Grafana at http://localhost:3000.  
+Grafana default credentials: admin / admin.
 
 ### Troubleshooting
 - If you see "address already in use" error, ensure no other FL server is running
@@ -190,9 +198,10 @@ docker compose up --scale client=3  # for 3 clients
 - Health Check: Server readiness check before client startup
 
 ## Next Steps
-- Better way to name the partition for each clients
-- Adding a config file instead of CLI parameter passing
-- Adding Prometheus metrics for monitoring
-- Setting up Grafana dashboards
-- Implementing resource constraints for clients
+- Better way to name the partition for each clients (currently its IP address mapping but we need to find more suitable)
+- Adding a config file instead of CLI parameter passing (and probably a get_config python function in each other python files or modular file works as well)
+- fix bugs whereever it is 🥲
+- Adding Prometheus metrics for monitoring (what more metrics we need to add?)
+- Setting up Grafana dashboards (is there a way we can automate it?)
+- Implementing resource constraints for clients (develop this from single client to multiple based on what we need to test)
 - Adding performance visualization

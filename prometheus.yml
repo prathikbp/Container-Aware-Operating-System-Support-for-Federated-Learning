@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 10s # Scrape metrics every 10 seconds
+
+scrape_configs:
+  - job_name: 'fl-clients'
+    
+    # --- NEW: Use Docker Service Discovery ---
+    # This connects to the Docker socket to find containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+    # --- END NEW ---
+
+    # --- NEW: Relabeling Rules ---
+    # These rules tell Prometheus to:
+    # 1. ONLY keep containers that have the label "com.docker.compose.service=client"
+    # 2. Re-write the container's address to use port 8000 (the one we exposed)
+    relabel_configs:
+      # Keep containers with the 'com.docker.compose.service' label = 'client'
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        action: keep
+        regex: client
+      
+      # Take the container's internal IP and set the port to 8000
+      - source_labels: [__address__]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+):.* # Capture the IP (everything before the colon)
+        replacement: $1:8000 # Use the captured IP ($1) and add port 8000
+    # --- END NEW ---

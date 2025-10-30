@@ -4,3 +4,5 @@ torch==2.9.0
 torchvision==0.24.0
 numpy>=1.21.0
 absl-py>=1.0.0
+prometheus-client>=0.17.0
+docker>=6.1.0

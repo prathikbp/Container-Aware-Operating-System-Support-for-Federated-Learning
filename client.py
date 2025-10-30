@@ -1,9 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
-from torchvision.transforms import ToTensor, Normalize, Compose
 from typing import Dict
 import flwr as fl
 import argparse
@@ -14,6 +9,13 @@ import os
 from absl import logging as absl_logging
 import logging.handlers
 import time
+from prometheus_client import start_http_server, Histogram
+
+TRAINING_TIME = Histogram(
+    'client_training_time_seconds', 
+    'Time spent training a client',
+    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, float("inf")]
+)
 
 
 # imports model and data loading functions from task.py
@@ -72,7 +74,7 @@ def parse_args():
 class MNISTClient(fl.client.NumPyClient):
     def __init__(self, args):
         self.model = Net()
-        
+
         ## TODO: Improve partition ID assignment logic
         # Determine partition ID based on container IP address
         time.sleep(2)
@@ -109,6 +111,10 @@ class MNISTClient(fl.client.NumPyClient):
     def fit(self, parameters, config: Dict[str, str]):
         print("\n" + "="*50)
         print("[FL] Starting local training round")
+
+        # Measure training time with Prometheus histogram
+        start_time = time.time()
+
         self.set_parameters(parameters)
 
         # Use local_epochs from command line args if not specified in server config
@@ -118,6 +124,12 @@ class MNISTClient(fl.client.NumPyClient):
         
         print("[FL] Completed local training")
         print("="*50)
+
+        # Record training time
+        duration = time.time() - start_time
+        TRAINING_TIME.observe(duration)
+        print(f"[Metrics] Training round took {duration:.2f} seconds")
+
         return self.get_parameters(config={}), len(self.trainloader.dataset), {}
 
     def evaluate(self, parameters, config):
@@ -152,7 +164,12 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     print("="*50 + "\n")
+
+    # Start Prometheus metrics server
+    print(f"Starting Prometheus metrics server on port 8000...")
+    start_http_server(8000)
     
+    # Start Flower client
     print("Starting Flower client...")
     fl.client.start_numpy_client(
         server_address=args.server_address,

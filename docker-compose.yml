@@ -22,6 +22,37 @@ services:
         condition: service_healthy
     environment:
       - NUM_CLIENTS=${NUM_CLIENTS:-3}
+      - COMPOSE_PROJECT_NAME=${container-aware-operating-system-support-for-federated-learning}
+    ports:
+      - "8000"
+
+  manager:
+    build: .
+    command: python manager.py
+    depends_on:
+      - client
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+  
+  prometheus:
+    image: prom/prometheus
+    user: 'root'
+    ports:
+      - "9090:9090"
+    volumes:
+      # Mount our new config file into the container
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      # Mount the Docker socket (read-only)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   data:

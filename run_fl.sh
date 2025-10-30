@@ -42,11 +42,11 @@ echo "🏗️  Building Docker images..."
 docker-compose build
 
 # Start the server first
-echo "📡 Starting FL server..."
+echo "Starting FL server..."
 docker-compose up -d server
 
 # Wait for server to be healthy
-echo "⏳ Waiting for server to be ready..."
+echo "Waiting for server to be ready..."
 timeout=60
 elapsed=0
 while [ $elapsed -lt $timeout ]; do
