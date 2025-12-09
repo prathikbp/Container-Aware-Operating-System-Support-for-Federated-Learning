@@ -1,0 +1,28 @@
+{
+  "num_clients": 3,
+  "server": {
+    "address": "0.0.0.0:8080",
+    "num_rounds": 5,
+    "fraction_fit": 1.0,
+    "fraction_evaluate": 1.0,
+    "min_fit_clients": 2,
+    "min_evaluate_clients": 2,
+    "min_available_clients": 2
+  },
+  "client": {
+    "server_address": "server:8080",
+    "batch_size": 32,
+    "local_epochs": 1,
+    "learning_rate": 0.01,
+    "momentum": 0.9
+  },
+  "manager": {
+    "project_name": "container-aware-operating-system-support-for-federated-learning",
+    "service_name": "client",
+    "straggler_index": 0,
+    "cpu_quota": 50000,
+    "cpu_period": 100000,
+    "max_retries": 10,
+    "retry_interval": 5
+  }
+}

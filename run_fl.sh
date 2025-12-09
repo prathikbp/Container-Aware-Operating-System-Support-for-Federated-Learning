@@ -163,6 +163,16 @@ services_to_start=("client" "${OPTIONAL_SERVICES[@]}" "${MONITORING_SERVICES[@]}
 echo "Starting $NUM_CLIENTS FL clients plus services: ${services_to_start[*]}..."
 docker-compose up -d --scale client=$NUM_CLIENTS "${services_to_start[@]}"
 
+echo "Waiting a few seconds to ensure services are up before mapping containers..."
+sleep 5
+
+echo "Updating Prometheus scrape config with current container IDs..."
+if ./map-containers.sh; then
+    echo "Prometheus configuration refreshed."
+else
+    echo "Warning: map-containers.sh failed; Prometheus labels may be stale." >&2
+fi
+
 echo ""
 echo "Federated Learning system is running!"
 echo ""
