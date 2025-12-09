@@ -1,3 +1,4 @@
+import time
 import flwr as fl
 from typing import List, Tuple, Dict, Optional
 from flwr.common import Metrics, Scalar
@@ -7,7 +8,34 @@ import logging
 import os
 import logging.handlers
 from absl import logging as absl_logging
+from prometheus_client import start_http_server, Histogram, Gauge, Counter
 
+
+# metrics definitions
+
+# We want to see this go DOWN when we implement timeouts
+ROUND_DURATION = Histogram(
+    'server_round_duration_seconds',
+    'Time taken for one full FL round (fit + eval)',
+    buckets=[5.0, 10.0, 20.0, 30.0, 60.0, 120.0, float("inf")]
+)
+
+# We want to see this go UP when we drop stragglers
+CLIENT_FAILURES = Counter(
+    'server_client_failures_total',
+    'Total number of clients that failed or timed out'
+)
+
+#  General Monitoring (System Health)
+GLOBAL_ACCURACY = Gauge(
+    'server_global_model_accuracy',
+    'Accuracy of the global model after aggregation'
+)
+
+CONNECTED_CLIENTS = Gauge(
+    'server_connected_clients',
+    'Number of clients selected for the current round'
+)
 
 def suppress_warnings():
     # Suppress all warnings
@@ -109,22 +137,64 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 
 class LoggingStrategy(fl.server.strategy.FedAvg):
     """FedAvg strategy with basic logging."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Keep track of when the round started
+        self.round_start_time = 0.0
+
+    def configure_fit(self, server_round, parameters, client_manager):
+        print(f"\n[Round {server_round}] Starting new training round")
+        
+        #  METRIC: Start Round Timer 
+        self.round_start_time = time.time()
+        
+        #  METRIC: Connected Clients 
+        # We can approximate this by how many clients we sample
+        # (Note: client_manager.num_available() is better if accessible, but sampling works)
+        # We'll just track how many we *asked* to fit
+        return super().configure_fit(server_round, parameters, client_manager)
     
     def aggregate_fit(self, server_round, results, failures):
         print(f"\n[Round {server_round}] Aggregating training results from {len(results)} clients")
+
+        #  METRIC: Connected Clients (Update) 
+        total_participants = len(results) + len(failures)
+        CONNECTED_CLIENTS.set(total_participants)
+
         if failures:
+            failure_count = len(failures)
             print(f"[Round {server_round}] {len(failures)} clients failed during training")
+            CLIENT_FAILURES.inc(failure_count)
         return super().aggregate_fit(server_round, results, failures)
 
     def aggregate_evaluate(self, server_round, results, failures):
         print(f"\n[Round {server_round}] Aggregating evaluation results from {len(results)} clients")
         if failures:
+            failure_count = len(failures)
             print(f"[Round {server_round}] {len(failures)} clients failed during evaluation")
-        return super().aggregate_evaluate(server_round, results, failures)
+            CLIENT_FAILURES.inc(failure_count)
 
-    def configure_fit(self, server_round, parameters, client_manager):
-        print(f"\n[Round {server_round}] Starting new training round")
-        return super().configure_fit(server_round, parameters, client_manager)
+        # Call parent to get aggregated metrics
+        agg_result = super().aggregate_evaluate(server_round, results, failures)
+        #  METRIC: Global Accuracy 
+        # agg_result is a tuple: (loss, metrics)
+        if agg_result and agg_result[1]:
+            metrics = agg_result[1]
+            if "accuracy" in metrics:
+                acc = metrics["accuracy"]
+                GLOBAL_ACCURACY.set(acc)
+                print(f"[Metrics] Round {server_round} Global Accuracy: {acc*100:.2f}%")
+
+        #  METRIC: Round Duration 
+        # We assume a round ends after evaluation
+        if self.round_start_time > 0:
+            duration = time.time() - self.round_start_time
+            ROUND_DURATION.observe(duration)
+            print(f"[Metrics] Round {server_round} Duration: {duration:.2f}s")
+            self.round_start_time = 0.0 # Reset
+
+        return agg_result
 
     def configure_evaluate(self, server_round, parameters, client_manager):
         print(f"\n[Round {server_round}] Starting evaluation")
@@ -139,6 +209,7 @@ def create_strategy(args):
         min_evaluate_clients=args.min_evaluate_clients,
         min_available_clients=args.min_available_clients,
         evaluate_metrics_aggregation_fn=weighted_average,
+        
     )
 
 # Start server
@@ -159,7 +230,11 @@ if __name__ == "__main__":
     print(f"Minimum Evaluate Clients: {args.min_evaluate_clients}")
     print(f"Minimum Available Clients: {args.min_available_clients}")
     print("="*50 + "\n")
-    
+
+    #  METRIC: Start Server-Side Metrics 
+    print("Starting Prometheus metrics server on port 8081...")
+    start_http_server(8081)
+
     # Create strategy with parsed arguments
     strategy = create_strategy(args)
 

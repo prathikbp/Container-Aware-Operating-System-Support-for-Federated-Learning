@@ -95,9 +95,9 @@ def main():
     # --- The Experiment ---
     # We will throttle the first client in the list to be our "straggler"
     straggler_container = client_containers[0]
-    cpu_quota_50_percent = 50000
+    cpu_quota = 0   # normal CPU
 
-    throttle_client(straggler_container, cpu_quota_50_percent)
+    throttle_client(straggler_container, cpu_quota)
 
     print("\n" + "="*50)
     print(f"[Manager] Experiment is running.")
