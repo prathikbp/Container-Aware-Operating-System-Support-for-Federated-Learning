@@ -88,6 +88,40 @@ chmod +x run_fl.sh
 ./run_fl.sh 5
 ```
 
+The script builds the images, boots the server, waits for it to become healthy, and then starts the scaled clients **alongside** the manager, Prometheus, and Grafana services so the monitoring stack is always ready.
+
+### Configuration file
+
+`run_fl.sh` now reads all deployment parameters from `fl_config.json`.  Update this file (or point the script at your own copy) to change the server/client tuning without editing the Compose file or remembering multiple CLI flags:
+
+```json
+{
+  "num_clients": 4,
+  "server": {
+    "address": "0.0.0.0:8080",
+    "num_rounds": 5,
+    "fraction_fit": 1.0,
+    "fraction_evaluate": 1.0,
+    "min_fit_clients": 2,
+    "min_evaluate_clients": 2,
+    "min_available_clients": 2
+  },
+  "client": {
+    "server_address": "server:8080",
+    "batch_size": 32,
+    "local_epochs": 1,
+    "learning_rate": 0.01,
+    "momentum": 0.9
+  }
+}
+```
+
+Usage examples:
+
+- `./run_fl.sh` – uses the defaults from `fl_config.json`
+- `./run_fl.sh --config configs/high-throughput.json` – load different values per experiment
+- `./run_fl.sh --num-clients 6` – quick override without touching the config file
+
 ### Using Docker (Recommended)
 
 1. Build and start the system with one server and one client:

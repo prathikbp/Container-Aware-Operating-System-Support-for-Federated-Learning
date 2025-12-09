@@ -1,3 +1,4 @@
+from random import random
 import torch
 from typing import Dict
 import flwr as fl
@@ -9,7 +10,7 @@ import os
 from absl import logging as absl_logging
 import logging.handlers
 import time
-from prometheus_client import start_http_server, Histogram
+from prometheus_client import start_http_server, Histogram, Gauge
 
 TRAINING_TIME = Histogram(
     'client_training_time_seconds', 
@@ -17,6 +18,48 @@ TRAINING_TIME = Histogram(
     buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 7.5, 10.0, 15.0, 20.0, float("inf")]
 )
 
+DATA_LOADING_TIME = Histogram(
+    "client_data_loading_time_seconds",
+    "Time spent preparing dataloaders for this client",
+    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0, float("inf")]
+)
+
+DATA_SAMPLES = Gauge(
+    "client_data_samples_total",
+    "Number of training samples available to this client",
+    labelnames=["client_id"],
+)
+
+EVAL_ACCURACY = Gauge("client_eval_accuracy",
+                      "Last local evaluation accuracy", labelnames=["client_id"])
+EVAL_LOSS = Gauge("client_eval_loss",
+                  "Last local evaluation loss", labelnames=["client_id"])
+
+DOWNLOAD_TIME = Histogram(
+    "client_download_time_seconds",
+    "Time spent downloading global parameters from the server",
+    buckets=[0.05, 0.1, 0.25, 0.5, 1, 2, 5, float("inf")],
+    labelnames=["client_id"],
+)
+
+UPLOAD_TIME = Histogram(
+    "client_upload_time_seconds",
+    "Time spent uploading updated parameters back to the server",
+    buckets=[0.05, 0.1, 0.25, 0.5, 1, 2, 5, float("inf")],
+    labelnames=["client_id"],
+)
+
+BATTERY_LEVEL = Gauge(
+    "client_battery_level_percent",
+    "Simulated battery percentage for this client",
+    labelnames=["client_id"],
+)
+
+IS_CHARGING = Gauge(
+    "client_is_charging",
+    "Simulated charging state (1 charging, 0 not)",
+    labelnames=["client_id"],
+)
 
 # imports model and data loading functions from task.py
 from task import Net, load_data, train, test
@@ -90,10 +133,17 @@ class MNISTClient(fl.client.NumPyClient):
         print(f"Final partition ID: {partition_id}")
 
         # Use federated data loading with partitioning
+        start = time.time()
         self.trainloader, self.testloader = load_data(
             partition_id=partition_id,
             num_partitions=args.num_clients
         )
+        DATA_LOADING_TIME.observe(time.time() - start)
+
+        DATA_SAMPLES.labels(client_id=str(partition_id)).set(
+            len(self.trainloader.dataset))
+        
+
         self.args = args
         # Determine device
         self.device = torch.device(
@@ -112,11 +162,25 @@ class MNISTClient(fl.client.NumPyClient):
         print("\n" + "="*50)
         print("[FL] Starting local training round")
 
+        self.battery_level = getattr(self, "battery_level", 100)
+        self.battery_level = max(self.battery_level - random.uniform(5, 15), 0)
+        BATTERY_LEVEL.labels(client_id=str(
+            self.partition_id)).set(self.battery_level)
+        
+        if self.battery_level < 20:
+            self.is_charging = 1
+            self.battery_level = min(self.battery_level + random.uniform(10, 20), 100)
+
+        else:
+            self.is_charging = 0
+        IS_CHARGING.labels(client_id=str(self.partition_id)).set(self.is_charging)
+
         # Measure training time with Prometheus histogram
         start_time = time.time()
-
+        download_start = time.time()
         self.set_parameters(parameters)
-
+        DOWNLOAD_TIME.labels(client_id=str(self.partition_id)).observe(
+            time.time() - download_start)
         # Use local_epochs from command line args if not specified in server config
         epochs = int(config.get("local_epochs", self.args.local_epochs))
 
@@ -130,15 +194,25 @@ class MNISTClient(fl.client.NumPyClient):
         TRAINING_TIME.observe(duration)
         print(f"[Metrics] Training round took {duration:.2f} seconds")
 
-        return self.get_parameters(config={}), len(self.trainloader.dataset), {}
+        upload_start = time.time()
+        updated_parameters = self.get_parameters(config={})
+        UPLOAD_TIME.labels(client_id=str(self.partition_id)).observe(
+            time.time() - upload_start)
+        
+        return updated_parameters, len(self.trainloader.dataset), {}
 
     def evaluate(self, parameters, config):
         print("\n" + "="*50)
         print("[FL] Starting model evaluation")
+        download_start = time.time()
         self.set_parameters(parameters)
+        DOWNLOAD_TIME.labels(client_id=str(self.partition_id)).observe(
+            time.time() - download_start)
 
         # Use the new test function to get both loss and accuracy
         loss, accuracy = test(self.model, self.testloader, device=self.device)
+        EVAL_ACCURACY.labels(client_id=str(self.partition_id)).set(accuracy)
+        EVAL_LOSS.labels(client_id=str(self.partition_id)).set(loss)
 
         print("[FL] Completed evaluation")
         print("="*50)
