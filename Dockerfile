@@ -31,7 +31,7 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8080 8000
 
 # Health check
-HEALTHCHECK CMD curl --fail http://localhost:8080/ || exit 1
+HEALTHCHECK CMD ["sh", "-c", "nc -z localhost 8080 || exit 1"]
 
 # Default command (overridden in docker-compose.yml)
 CMD ["python", "server.py"]

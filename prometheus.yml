@@ -1,0 +1,127 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  # FL CLIENTS
+  - job_name: 'fl-clients'
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        action: keep
+        regex: client
+
+      - source_labels: [__address__]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+):.*
+        replacement: $1:8000
+
+      - source_labels: [__meta_docker_container_name]
+        action: replace
+        target_label: instance
+        regex: '.+client-([0-9]+)'
+        replacement: 'client-$1'
+
+  # FL SERVER
+  - job_name: 'fl-server'
+    static_configs:
+      - targets: 
+        - 'server:8081'
+        labels:
+          instance: 'fl-server'
+
+  # CADVISOR WITH CONTAINER ID MAPPING
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets:
+        - 'cadvisor:8080'
+    metric_relabel_configs:
+      # Map container ID 32f0fe5e7f77 to client-1
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*32f0fe5e7f77.*'
+        replacement: 'client-1'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/32f0fe5e7f77.*'
+        replacement: 'client-1'
+      # Map container ID 0a8878df3193 to client-2
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*0a8878df3193.*'
+        replacement: 'client-2'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/0a8878df3193.*'
+        replacement: 'client-2'
+      # Map container ID 908d628738a9 to client-3
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*908d628738a9.*'
+        replacement: 'client-3'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/908d628738a9.*'
+        replacement: 'client-3'
+      # Map container ID 8ef6c3a9121c to grafana
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*8ef6c3a9121c.*'
+        replacement: 'grafana'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/8ef6c3a9121c.*'
+        replacement: 'grafana'
+      # Map container ID 6e22060b4b57 to prometheus
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*6e22060b4b57.*'
+        replacement: 'prometheus'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/6e22060b4b57.*'
+        replacement: 'prometheus'
+      # Map container ID ee35a48168fc to cadvisor
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*ee35a48168fc.*'
+        replacement: 'cadvisor'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/ee35a48168fc.*'
+        replacement: 'cadvisor'
+      # Map container ID 6e9a5f14abca to redis
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*6e9a5f14abca.*'
+        replacement: 'redis'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/6e9a5f14abca.*'
+        replacement: 'redis'
+      # Map container ID 3b81b367a719 to fl-server
+      - source_labels: [id]
+        action: replace
+        target_label: container_name
+        regex: '.*3b81b367a719.*'
+        replacement: 'fl-server'
+      - source_labels: [id]
+        action: replace
+        target_label: id
+        regex: '.*/docker/3b81b367a719.*'
+        replacement: 'fl-server'

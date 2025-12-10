@@ -6,11 +6,15 @@ This project implements a containerized Federated Learning system using Flower (
 ```
 .
 ├── Dockerfile          # Container configuration for both server and clients
-├── docker-compose.yml # Docker services configuration
-├── requirements.txt   # Python dependencies
-├── server.py         # FL server implementation
-├── client.py         # FL client implementation
-└── data/            # MNIST dataset directory (auto-downloaded)
+├── docker-compose.yml  # Docker services configuration
+├── requirements.txt    # Python dependencies
+├── server.py           # FL server implementation
+├── client.py           # FL client implementation
+├── task.py             # FL model and data loaders
+├── run_fl.sh           # deployment script
+├── prometheus.yml      # Prometheus service config
+├── manager.py          # throttler for testing
+└── data/               # MNIST dataset directory (auto-downloaded)
 ```
 
 ## Features
@@ -68,28 +72,76 @@ source venv/bin/activate  # On Linux/macOS
 pip install -r requirements.txt
 ```
 
+4. Install Docker for Prometheus and Grafana
+
 ## Running the Project
+### Using the deployment script
+
+Before running the deployment script, ensure executable permissions are set:
+
+```bash
+chmod +x run_fl.sh
+```
+
+```bash
+# Run with 5 clients (default is 3)
+./run_fl.sh 5
+```
+
+The script builds the images, boots the server, waits for it to become healthy, and then starts the scaled clients **alongside** the manager, Prometheus, and Grafana services so the monitoring stack is always ready.
+
+### Configuration file
+
+`run_fl.sh` now reads all deployment parameters from `fl_config.json`.  Update this file (or point the script at your own copy) to change the server/client tuning without editing the Compose file or remembering multiple CLI flags:
+
+```json
+{
+  "num_clients": 4,
+  "server": {
+    "address": "0.0.0.0:8080",
+    "num_rounds": 5,
+    "fraction_fit": 1.0,
+    "fraction_evaluate": 1.0,
+    "min_fit_clients": 2,
+    "min_evaluate_clients": 2,
+    "min_available_clients": 2
+  },
+  "client": {
+    "server_address": "server:8080",
+    "batch_size": 32,
+    "local_epochs": 1,
+    "learning_rate": 0.01,
+    "momentum": 0.9
+  }
+}
+```
+
+Usage examples:
+
+- `./run_fl.sh` – uses the defaults from `fl_config.json`
+- `./run_fl.sh --config configs/high-throughput.json` – load different values per experiment
+- `./run_fl.sh --num-clients 6` – quick override without touching the config file
 
 ### Using Docker (Recommended)
 
 1. Build and start the system with one server and one client:
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 2. Scale to multiple clients (e.g., 3 clients):
 ```bash
-docker-compose up --scale client=3
+docker compose up --scale client=3
 ```
 
 3. Monitor the training progress in the logs:
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 4. Stop the system:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Running Without Docker
@@ -137,6 +189,10 @@ python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
 # Terminal 4 - Start Client 3
 python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
 ```
+### Prometheus and Grafana dashboards
+
+Once the containers are running, access Prometheus at http://localhost:9090 and Grafana at http://localhost:3000.  
+Grafana default credentials: admin / admin.
 
 ### Troubleshooting
 - If you see "address already in use" error, ensure no other FL server is running
@@ -154,12 +210,12 @@ python client.py --batch-size 32 --local-epochs 1 --learning-rate 0.01
 
 1. Build and start the system:
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 2. Scale to more clients:
 ```bash
-docker-compose up --scale client=3  # for 3 clients
+docker compose up --scale client=3  # for 3 clients
 ```
 
 ## Federated Learning Configuration
@@ -176,7 +232,10 @@ docker-compose up --scale client=3  # for 3 clients
 - Health Check: Server readiness check before client startup
 
 ## Next Steps
-- Adding Prometheus metrics for monitoring
-- Setting up Grafana dashboards
-- Implementing resource constraints for clients
+- Better way to name the partition for each clients (currently its IP address mapping but we need to find more suitable)
+- Adding a config file instead of CLI parameter passing (and probably a get_config python function in each other python files or modular file works as well)
+- fix bugs whereever it is 🥲
+- Adding Prometheus metrics for monitoring (what more metrics we need to add?)
+- Setting up Grafana dashboards (is there a way we can automate it?)
+- Implementing resource constraints for clients (develop this from single client to multiple based on what we need to test)
 - Adding performance visualization
